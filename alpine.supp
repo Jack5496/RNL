@@ -1,0 +1,67 @@
+{
+   alpine_free
+   Memcheck:Free
+   fun:free
+   obj:/lib/ld-musl-x86_64.so.1
+}
+{
+   	free2
+        Memcheck:Leak
+        fun:calloc
+	obj:/lib/ld-musl-x86_64.so.1
+}
+{
+gpgmedatanew
+Memcheck:Leak
+match-leak-kinds: definite
+fun:calloc
+obj:/usr/lib/libgpgme.so.11.14.0
+fun:gpgme_data_new
+fun:main
+}
+{
+   gpgme-static-get-engine-info
+   Memcheck:Leak
+   fun:malloc
+   ...
+   fun:gpgme_get_engine_info
+}
+{
+   gpgme-static-set-engine-info
+   Memcheck:Leak
+   fun:malloc
+   ...
+   fun:_gpgme_set_engine_info
+   fun:gpgme_set_engine_info
+}
+{
+   gpgme-static-set-locale
+   Memcheck:Leak
+   fun:malloc
+   fun:strdup
+   fun:gpgme_set_locale
+}
+
+{
+    gpgme_strdup
+    Memcheck:Leak
+    match-leak-kinds: reachable
+    fun:malloc
+    fun:strdup
+    obj:*
+}
+{
+    gpgme_malloc_strdup
+    Memcheck:Leak
+    match-leak-kinds: reachable
+    fun:malloc
+    fun:strdup
+}
+{
+    ignore_libgpgme
+    Memcheck:Leak
+     ...
+    obj:*/libgpgme.so.*
+}
+
+
