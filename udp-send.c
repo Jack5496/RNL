@@ -34,10 +34,11 @@ int server_port = 80;  /* Server Port */
 
 void printSatus(int success, int pending){
 		printf("\33[2K\r");
-		for(int x=0;x<success;x++){
+		int x;
+		for(x=0;x<success;x++){
 			printf(GREEN "•" RESET,stdout);
 		}
-		for(int x=0;x<pending;x++){
+		for(x=0;x<pending;x++){
 			printf(YELLOW "•" RESET,stdout);
 		}
 		rewind(stdout);
