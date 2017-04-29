@@ -14,18 +14,79 @@
 #include <string.h>
 #include <netdb.h>
 #include <sys/socket.h>
-#include "port.h"
+#include <time.h>
 
-#define BUFLEN 2048
+
+#define RED     "\x1b[31m"
+#define GREEN   "\x1b[32m"
+#define YELLOW  "\x1b[33m"
+#define BLUE    "\x1b[34m"
+#define MAGENTA "\x1b[35m"
+#define CYAN    "\x1b[36m"
+#define RESET   "\x1b[0m"
+
+#define BUFLEN 65536
 #define MSGS 5	/* number of messages to send */
 
-int main(void)
-{
+
+char server_adress[65536]; /* Platz für Server Adresse */
+int server_port = 80;  /* Server Port */
+
+void printSatus(int success, int pending){
+		printf("\33[2K\r");
+		for(int x=0;x<success;x++){
+			printf(GREEN "•" RESET,stdout);
+		}
+		for(int x=0;x<pending;x++){
+			printf(YELLOW "•" RESET,stdout);
+		}
+		rewind(stdout);
+}
+
+
+int main(int argc, char **argv){
+
 	struct sockaddr_in myaddr, remaddr;
 	int fd, i, slen=sizeof(remaddr);
 	char buf[BUFLEN];	/* message buffer */
 	int recvlen;		/* # bytes in acknowledgement message */
-	char *server = "127.0.0.1";	/* change this to use a different server */
+
+	int needed_arguments = 1; //programm selber
+	needed_arguments++; //Server Adress
+    	needed_arguments++; //Server Port
+    	needed_arguments++; //Mode
+    	needed_arguments++; //From Here up the Message
+
+
+
+	if(argc!=needed_arguments){
+		printf("Not enough arguments!\n");
+		printf("Usage: ServerAdress Port Mode Message!\n");
+		exit(1);
+	}
+
+	
+       int err_adr = inet_aton(argv[1],&remaddr.sin_addr);
+        	
+	if(err_adr==0) {
+ 		printf("Error: No valid Server IP\n");
+     		exit(1);
+ 	}
+        
+        i=0;
+        /* Laufe bis zum ende des Strings */
+        while(argv[2][i] != '\0'){
+             /* Überprüfe jedes Zeichen ob es eine Zahl ist in ASCII */
+             if (argv[2][i] < 47 || argv[2][i] > 57){ //falls nicht
+                printf("Error: No valid Port\n");
+                exit(1);
+            }
+            i++;
+        }
+         
+        /* Alles lief wohl gut */ 
+        server_port = atoi(argv[2]);
+
 
 	/* create a socket */
 
@@ -48,30 +109,45 @@ int main(void)
 	/* For convenience, the host address is expressed as a numeric IP address */
 	/* that we will convert to a binary format via inet_aton */
 
-	memset((char *) &remaddr, 0, sizeof(remaddr));
+	//memset((char *) &remaddr, 0, sizeof(remaddr));
 	remaddr.sin_family = AF_INET;
-	remaddr.sin_port = htons(SERVICE_PORT);
-	if (inet_aton(server, &remaddr.sin_addr)==0) {
-		fprintf(stderr, "inet_aton() failed\n");
-		exit(1);
-	}
+	remaddr.sin_port = htons(server_port);
 
 	/* now let's send the messages */
 
-	for (i=0; i < MSGS; i++) {
-		printf("Sending packet %d to %s port %d\n", i, server, SERVICE_PORT);
+	int pending = 0;
+	int success = 0;
+
+	printf(GREEN "Test: " RESET "Sending %d messages to port %d\n",MSGS,server_port);
+
+	for (i=1; i < MSGS+1; i++) {
+		pending++;
+		
+		printSatus(success, pending);
+
 		sprintf(buf, "This is packet %d", i);
 		if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, slen)==-1) {
 			perror("sendto");
 			exit(1);
 		}
+		sleep(1);
+
+
 		/* now receive an acknowledgement from the server */
 		recvlen = recvfrom(fd, buf, BUFLEN, 0, (struct sockaddr *)&remaddr, &slen);
-                if (recvlen >= 0) {
-                        buf[recvlen] = 0;	/* expect a printable string - terminate it */
-                        printf("received message: \"%s\"\n", buf);
-                }
+              if (recvlen >= 0) {
+                    	buf[recvlen] = 0;	/* expect a printable string - terminate it */
+                        
+			success++;
+			pending--;
+			printSatus(success, pending);   
+			sleep(1);
+			
+			//printf("received message: \"%s\"\n", buf);
+              }
 	}
+	printf("\nTest complete!\n");
+
 	close(fd);
 	return 0;
 }
