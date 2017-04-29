@@ -138,7 +138,7 @@ int rtt(int amount){
 		}
 	}
 
-	roundtt = totaltime/amount;
+	roundtt = totaltime/amount/TO_MS;
 	printStatus(amount-lost, amount,lost);
 	printf("\nTest complete!\n");
 
