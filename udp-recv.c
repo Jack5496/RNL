@@ -117,6 +117,15 @@ int rttResponse(){
 }
 
 int bandwithResponse(int amount){
+
+	int milliseconds = 1000;
+	struct timespec ts;
+    	ts.tv_sec = milliseconds / 1000;
+    	ts.tv_nsec = (milliseconds % 1000) * 1000000;
+
+	nanosleep(&ts, NULL);
+
+
 	int i;
 	for(i=1;i<amount+1;i++){
 		printStatus(i,amount);

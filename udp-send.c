@@ -19,10 +19,11 @@
 #include <math.h>
 
 
-#define TIMEOUT 2
+#define TIMEOUT 30
 #define DEFAULT_RTT_COUNTING 100 /* Default counting package value */
-#define DEFAULT_BANDWIDTH_COUNTING 50000 /* Default counting package value */
+#define DEFAULT_BANDWIDTH_COUNTING 50 /* Default counting package value */
 #define DEFAULT_LOSS_COUNTING 100 /* Default counting package value */
+// Potter 131.173.33.201
 
 
 /* Some colors */
@@ -190,8 +191,8 @@ int bandwith(int counting, int demand){
                      printStatus(i,counting,lost);
               }
 		else{
-			printf(RED"\nTest has stopped! Please restart!\n");
-			myerror("Packageloss! Can’t measure max. Bandwidth!");
+			lost++;
+			printStatus(i-lost,counting,lost);
 		}
 
 		if(i==1){
