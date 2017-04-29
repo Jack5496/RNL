@@ -130,7 +130,7 @@ Gibt einen Status in der selben Zeile zurück nach dem Schema:
 */
 void printStatus(int success, int total_messages, int lost){
 		printf("\33[2K\r");	/* Springe zum Anfang der Zeile zurück */
-		printf("Recieved: " GREEN "%d" RESET"/%d | Lost: "RED"%d"RESET,success,total_messages,lost,stdout);
+		printf("Recieved: " GREEN "%d" RESET"/%d | Lost: "RED"%d"RESET,success,total_messages,lost);
 		rewind(stdout); /* Springe zum Anfang der Zeile zurück */
 }
 

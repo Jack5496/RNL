@@ -43,7 +43,7 @@ int mode;			/* Modus */
 /* Printet einen Status aus */
 void printStatus(int success, int total_messages){
 		printf("\33[2K\r");
-		printf("Sending: " GREEN "%d" RESET"/%d",success,total_messages,stdout);
+		printf("Sending: " GREEN "%d" RESET"/%d",success,total_messages);
 		rewind(stdout);
 }
 
