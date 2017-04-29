@@ -58,16 +58,18 @@ Die Modi:
 	Daher kam die Idee der Restriktion der Bandbreite auf 200 kbp/s —> 0,025 MB/s. Dazu wird mit der Paketgröße
 	 <MAXMTU> (200 Byte) berechnet wie viele pro Sekunde versendet werden müssen. Diese werden in dem berechneten
 	Zeitintervall nacheinander versendet. Abschließend wird wie in Modus 2 die Bandbreite berechnet.
-	
-
-
 */
 
+
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <netdb.h>
 #include <sys/socket.h>
+#include <unistd.h> // for close
 #include <time.h>
 #include <sys/time.h>
 #include <inttypes.h>
@@ -100,7 +102,8 @@ char server_adress[65536]; 	/* Server Adress */
 int server_port;  	/* Server Port */
 
 struct sockaddr_in myaddr, remaddr; /* Server und Client SockAddr*/
-int fd, i, slen=sizeof(remaddr);	 
+int fd, i;
+socklen_t slen=sizeof(remaddr);	 
 char buf[BUFLEN];	/* message buffer */
 int recvlen;		/* # bytes in acknowledgement message */
 int mode;		/* Modus Variable */
