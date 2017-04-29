@@ -28,18 +28,18 @@
 #define RESET   "\x1b[0m"
 
 #define BUFLEN 65536
+#define TESTINGLEN 1450
 #define MSGS 100	/* number of messages to send */
 #define TO_SEC 1000000	/* number of messages to send */
 #define TO_MS 1000	/* number of messages to send */
-
 
 char server_adress[65536]; /* Platz für Server Adresse */
 // Potter 131.173.33.201
 int server_port = 80;  /* Server Port */
 
-void printSatus(int success, int total_messages,double rtt){
+void printStatus(int success, int total_messages){
 		printf("\33[2K\r");
-		printf("Recieved: " GREEN "%d" RESET "/%d | RTT in s: %g",success,total_messages,rtt,stdout);
+		printf("Recieved: " GREEN "%d" RESET"/%d",success,total_messages,stdout);
 		rewind(stdout);
 }
 
@@ -77,13 +77,13 @@ int stringToInt(char *argv){
 }
 
 
-int rtt(){
+int rtt(int amount){
 
 /* now let's send the messages */
 
 	printf(GREEN "Test: " RESET "Sending %d messages to port %d\n",MSGS,server_port);
 
-	for (i=1; i < MSGS+1; i++) {
+	for (i=1; i < amount +1; i++) {
 
 		sprintf(buf, "[%d] This is packet %d", rtt_mode, i);
 
@@ -102,7 +102,6 @@ int rtt(){
               if (recvlen >= 0) {
 			if(clock_gettime(CLOCK_MONOTONIC_RAW,&timeEnd)){
 				myerror("Time is broken!");
-				exit(1);
 			}
 
 			deltatime = (timeEnd.tv_sec - timeStart.tv_sec) * TO_SEC;
@@ -111,7 +110,7 @@ int rtt(){
 
                     	buf[recvlen] = 0;	/* expect a printable string - terminate it */
                         
-			printSatus(i, MSGS,deltatime/TO_SEC);   
+			printStatus(i, amount);   
 			
               }
 		else{
@@ -119,8 +118,9 @@ int rtt(){
 		}
 	}
 
-	double rtt = totaltime/MSGS/TO_SEC;
-	printSatus(MSGS, MSGS,rtt);   
+	double rtt = totaltime/amount/TO_SEC;
+	printStatus(amount, amount);
+	printf("RTT: %g\n",rtt);   
 	printf("\nTest complete!\n");
 
 	close(fd);
@@ -134,50 +134,68 @@ int rtt(){
 
 
 
-int bandwith(int amount, char *message){
+int bandwith(int amount){
+
+double goodput = 0.0;
 
 /* now let's send the messages */
 
 	printf(GREEN "Test: " RESET "Sending %d messages to port %d\n",MSGS,server_port);
 
-	for (i=1; i < MSGS+1; i++) {
+	char data[TESTINGLEN];
+	int pos;
+	for(pos=0;pos<TESTINGLEN;pos++){
+		data[pos]='1';
+	}
+	data[TESTINGLEN-1]='\0';
 
-		sprintf(buf, "This is packet %d", i);
+	sprintf(buf, "[%d][%d]%s", bandwith_mode,amount,data);
 
-		if(clock_gettime(CLOCK_MONOTONIC_RAW,&timeStart)){
-			myerror("Time is broken!\n");
-		}
-
-		if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, slen)==-1) {
+	if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, slen)==-1) {
 			perror("sendto");
 			myerror("SendTo Error!");
 		}
+
+	for (i=1; i < amount+1; i++) {
 
 
 		/* now receive an acknowledgement from the server */
 		recvlen = recvfrom(fd, buf, BUFLEN, 0, (struct sockaddr *)&remaddr, &slen);
               if (recvlen >= 0) {
-			if(clock_gettime(CLOCK_MONOTONIC_RAW,&timeEnd)){
-				myerror("Time is broken!");
-				exit(1);
+
+			goodput+=recvlen;
+
+			if(i==1){
+				if(clock_gettime(CLOCK_MONOTONIC_RAW,&timeStart)){
+					myerror("Time is broken!\n");
+				}
 			}
 
-			deltatime = (timeEnd.tv_sec - timeStart.tv_sec) * TO_SEC;
-			deltatime += (timeEnd.tv_nsec - timeStart.tv_nsec) / TO_MS;
-			totaltime += deltatime;
+			if(i==amount){
+				if(clock_gettime(CLOCK_MONOTONIC_RAW,&timeEnd)){
+					myerror("Time is broken!");
+				}
+			}
 
                     	buf[recvlen] = 0;	/* expect a printable string - terminate it */
-                        
-			printSatus(i, MSGS,deltatime/TO_SEC);   
-			
+                     printStatus(i,amount);
               }
 		else{
 			myerror("RecFrom Fail!");
 		}
 	}
 
-	double rtt = totaltime/MSGS/TO_SEC;
-	printSatus(MSGS, MSGS,rtt);   
+	deltatime = (timeEnd.tv_sec - timeStart.tv_sec) * TO_SEC;
+	deltatime += (timeEnd.tv_nsec - timeStart.tv_nsec) / TO_MS;
+	totaltime += deltatime;
+   	totaltime/=TO_SEC;
+	goodput/=8000000; //in MB
+
+	goodput/=totaltime;
+
+
+	printf("\nBandwidth: %gMB/s!\n",goodput);
+	
 	printf("\nTest complete!\n");
 
 	close(fd);
@@ -185,6 +203,45 @@ int bandwith(int amount, char *message){
 }
 
 
+
+int packageloss(int amount){
+
+/* now let's send the messages */
+
+	printf(GREEN "Test: " RESET "Sending %d messages to port %d\n",MSGS,server_port);
+
+	char data[20];
+	memset(data,0, TESTINGLEN*sizeof(int));
+
+	sprintf(buf, "[%d][%d] - %s", packageloss_mode,amount, data);
+
+	if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, slen)==-1) {
+			perror("sendto");
+			myerror("SendTo Error!");
+		}
+
+	int recieved = 0;
+
+	for (i=1; i < amount+1; i++) {
+		/* now receive an acknowledgement from the server */
+		recvlen = recvfrom(fd, buf, BUFLEN, 0, (struct sockaddr *)&remaddr, &slen);
+              if (recvlen >= 0) {
+                    	buf[recvlen] = 0;	/* expect a printable string - terminate it */
+                     printf("Package %d : %s!\n",i,buf);
+			recieved++;
+              }
+		else{
+			//printf("RecFrom Fail!\n"); //package lost
+		}
+	}
+   	
+	int lost = amount-recieved;
+	printf("Recieved: %d/%d | Lost: "RED"%d\n"RESET,recieved,amount,lost);
+	printf("\nTest complete!\n");
+
+	close(fd);
+	return 0;
+}
 
 
 
@@ -197,14 +254,13 @@ int main(int argc, char **argv){
     	needed_arguments++; //Mode
 	
 	int arguments_for_rtt = needed_arguments;
+	arguments_for_rtt ++; //Amount
 	
 	int arguments_for_brandwith = needed_arguments;
 	arguments_for_brandwith ++; //Amount
-	arguments_for_brandwith ++; //Message
 
 	int arguments_for_packageloss = needed_arguments;
 	arguments_for_packageloss ++; //Amount
-	arguments_for_packageloss ++; //Message
 
 	if(argc<needed_arguments){
 		printf("Not enough arguments!\n");
@@ -233,6 +289,16 @@ int main(int argc, char **argv){
 	myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	myaddr.sin_port = htons(0);
 
+
+
+	struct timeval tv;
+	tv.tv_sec = 5;
+	tv.tv_usec = 0;
+
+	if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO,&tv,sizeof(tv)) < 0) {
+    		perror("Error");
+	}
+
 	if (bind(fd, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0) {
 		perror("bind failed");
 		myerror("Binding Failed!");
@@ -248,6 +314,10 @@ int main(int argc, char **argv){
 
 
 
+
+
+
+
 	/* Mode auslesen */ 
        mode = stringToInt(argv[3]);
 	
@@ -258,17 +328,19 @@ int main(int argc, char **argv){
 		if(argc!=arguments_for_rtt){
 			myerror("Not enough arguments for RRT!");
 		}
-		rtt();
+		rtt(stringToInt(argv[4]));
 	}
 	if(mode==2){
 		if(argc!=arguments_for_brandwith){
-			myerror("Not enough arguments for RRT!");
+			myerror("Not enough arguments for brandwith!");
 		}
+		bandwith(stringToInt(argv[4]));
 	}
 	if(mode==3){
 		if(argc!=arguments_for_packageloss){
-			myerror("Not enough arguments for RRT!");
+			myerror("Not enough arguments for package loss!");
 		}
+		packageloss(stringToInt(argv[4]));
 	}
 
 

@@ -15,11 +15,30 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
-#define BUFSIZE 2048
+#define BUFSIZE 65536
+
+#define RED     "\x1b[31m"
+#define GREEN   "\x1b[32m"
+#define YELLOW  "\x1b[33m"
+#define BLUE    "\x1b[34m"
+#define MAGENTA "\x1b[35m"
+#define CYAN    "\x1b[36m"
+#define RESET   "\x1b[0m"
+
 
 int SERVICE_PORT = 5050; /* default port */
 int keep_alive = 1; /* boolean solange zugehört wird */
 char server_adress[] = "127.0.0.1";  /* Default server adresse */
+char buf[BUFSIZE];	/* receive buffer */
+
+struct sockaddr_in myaddr,remaddr;	/* remote address */
+socklen_t addrlen = sizeof(remaddr);		/* length of addresses */
+int recvlen;			/* # bytes received */
+int fd;				/* our socket */
+int msgcnt = 0;			/* count # of messages we received */	
+
+int mode;
+
 
 /**
 * Letzer aufruf um alles wichtige zu schließen
@@ -29,8 +48,103 @@ void last_wish(int i){
 	keep_alive=0; /* Wir möchten unsere While Loop beenden */
 }
 
-int
-main(int argc, char **argv)
+int myerror(char *argv){
+	printf(RED "%s" RESET "\n",argv);
+	exit(1);
+}
+
+int stringToInt(char argv[]){
+	int i=0;
+        /* Laufe bis zum ende des Strings */
+        while(argv[i] != '\0'){
+             /* Überprüfe jedes Zeichen ob es eine Zahl ist in ASCII */
+             if (argv[i] < 47 || argv[i] > 57){ //falls nicht
+                myerror("Error: No valid Number\n");
+                
+            }
+            i++;
+        }
+
+	return atoi(argv);
+}
+
+int getParam(char *buffer,int pos){
+	int from = -1;
+	int till = -1;
+
+	int i=0;
+        /* Laufe bis zum ende des Strings */
+        while(buffer[i] != '\0'){
+             /* Überprüfe jedes Zeichen ob es eine Zahl ist in ASCII */
+		if(pos<0){
+			break;
+		}
+
+             if (buffer[i] == 91){
+		from = i;	
+            }
+	    if (buffer[i] == 93){
+		till = i;
+		pos--;
+            }
+            i++;
+        }
+
+	int size = till-from-1;
+
+	char subbuff[size+1];
+	memcpy( subbuff, &buffer[from+1], size );
+	subbuff[size] = '\0';
+
+	int mode = stringToInt(subbuff);
+
+	return mode;
+
+}
+
+int rttResponse(){
+	sprintf(buf, "ack %d", msgcnt++);
+	printf("sending response \"%s\"\n", buf);
+	if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, addrlen) < 0){
+		perror("sendto");
+	}
+	return 0;
+}
+
+int bandwithResponse(int amount){
+	int i;
+	for(i=0;i<amount;i++){
+		printf("Response \"%s\"\n", buf);
+		if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, addrlen) < 0){
+			perror("sendto");
+		}
+	}
+	
+	return 0;
+}
+
+int packagelossResponse(int amount){
+	int i;
+
+	int milliseconds = 10;
+	struct timespec ts;
+    	ts.tv_sec = milliseconds / 1000;
+    	ts.tv_nsec = (milliseconds % 1000) * 1000000;
+    	
+
+
+	for(i=0;i<amount;i++){
+		printf("Response \"%s\"\n", buf);
+		if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, addrlen) < 0){
+			perror("sendto");
+		}
+		nanosleep(&ts, NULL);
+	}
+	
+	return 0;
+}
+
+int main(int argc, char **argv)
 {
 	//Handlet aktivierung für STRG+C
 	//http://stackoverflow.com/questions/1641182/how-can-i-catch-a-ctrl-c-event-c
@@ -77,12 +191,7 @@ main(int argc, char **argv)
 
 
 
-	struct sockaddr_in myaddr,remaddr;	/* remote address */
-	socklen_t addrlen = sizeof(remaddr);		/* length of addresses */
-	int recvlen;			/* # bytes received */
-	int fd;				/* our socket */
-	int msgcnt = 0;			/* count # of messages we received */
-	unsigned char buf[BUFSIZE];	/* receive buffer */
+	
 
 
 	/* create a UDP socket */
@@ -111,13 +220,23 @@ main(int argc, char **argv)
 		if (recvlen > 0) {
 			buf[recvlen] = '\0';
 			printf("received message: \"%s\" (%d bytes)\n", buf, recvlen);
+			mode = getParam(buf,0);
+			int amount = getParam(buf,1);
+
+			if(mode==1){
+				rttResponse();
+			}
+			if(mode==2){
+				bandwithResponse(amount);
+			}
+			if(mode==3){
+				packagelossResponse(amount);
+			}
 		}
-		else
+		else{
 			printf("uh oh - something went wrong!\n");
-		sprintf(buf, "ack %d", msgcnt++);
-		printf("sending response \"%s\"\n", buf);
-		if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, addrlen) < 0)
-			perror("sendto");
+		}
+
 	}
 	/* never exits */
 
