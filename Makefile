@@ -3,7 +3,7 @@ CFLAGS = -g
 # uncomment this for SunOS
 # LIBS = -lsocket -lnsl
 
-all: udp-send udp-recv
+all: clean udp-send udp-recv
 
 udp-send: udp-send.o 
 	$(CC) -o udp-send udp-send.o $(LIBS)
