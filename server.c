@@ -1,6 +1,6 @@
 /*
-        demo-udp-03: udp-recv: a simple udp server
-	receive udp messages
+Der Server zum Messen eines Netzwerk. Dieses Programm ist das Gegenstück des Client und führt die dort beschriebenen Handlungen aus.
+Benutzung: ./server <PORT>
 */
 
 #include <signal.h> /* Damit ich Signale abfangen kann */
@@ -12,11 +12,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <netdb.h>
+#include <time.h>
+#include <sys/time.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
 #define BUFSIZE 65536
 
+/* Colors */
 #define RED     "\x1b[31m"
 #define GREEN   "\x1b[32m"
 #define YELLOW  "\x1b[33m"
@@ -24,7 +27,6 @@
 #define MAGENTA "\x1b[35m"
 #define CYAN    "\x1b[36m"
 #define RESET   "\x1b[0m"
-
 
 int SERVICE_PORT = 5050; /* default port */
 int keep_alive = 1; /* boolean solange zugehört wird */
@@ -36,9 +38,9 @@ socklen_t addrlen = sizeof(remaddr);		/* length of addresses */
 int recvlen;			/* # bytes received */
 int fd;				/* our socket */
 int msgcnt = 0;			/* count # of messages we received */	
+int mode;			/* Modus */
 
-int mode;
-
+/* Printet einen Status aus */
 void printStatus(int success, int total_messages){
 		printf("\33[2K\r");
 		printf("Sending: " GREEN "%d" RESET"/%d",success,total_messages,stdout);
@@ -53,11 +55,17 @@ void last_wish(int i){
 	keep_alive=0; /* Wir möchten unsere While Loop beenden */
 }
 
+/* 
+Kleine farbige Fehlermeldung die das Programm anschließend beendet
+ */
 int myerror(char *argv){
 	printf(RED "%s" RESET "\n",argv);
 	exit(1);
 }
 
+/* 
+Konvertiert String in ein Int um
+ */
 int stringToInt(char argv[]){
 	int i=0;
         /* Laufe bis zum ende des Strings */
@@ -73,7 +81,11 @@ int stringToInt(char argv[]){
 	return atoi(argv);
 }
 
+/* 
+Extrahiert einen Parameter (Int) aus dem Buffer und gibt diesen Zurück
+ */
 int getParam(char *buffer,int pos){
+	/* Positions Variablen */
 	int from = -1;
 	int till = -1;
 
@@ -84,29 +96,36 @@ int getParam(char *buffer,int pos){
 		if(pos<0){
 			break;
 		}
-
-             if (buffer[i] == 91){
-		from = i;	
-            }
-	    if (buffer[i] == 93){
-		till = i;
-		pos--;
-            }
-            i++;
+		/* [ gefunden? */
+             	if (buffer[i] == 91){
+			from = i;	
+            	}
+		/* ] gefunden? */
+	    	if (buffer[i] == 93){
+			till = i;
+			pos--; /* skip Param */
+            	}
+            	i++;
         }
 
+	/* Berechne tanzt große */
 	int size = till-from-1;
 
+	/* Erstelle Buffer und extrahiere */
 	char subbuff[size+1];
 	memcpy( subbuff, &buffer[from+1], size );
 	subbuff[size] = '\0';
 
+	/* Gebe Parameter zurück */
 	int mode = stringToInt(subbuff);
 
 	return mode;
 
 }
 
+/* 
+Spiegele einfach die im Buffer angekommene Nachricht an den Client
+ */
 int rttResponse(){
 	sprintf(buf, "ack %d", msgcnt++);
 	//printf("sending response \"%s\"\n", buf);
@@ -116,16 +135,21 @@ int rttResponse(){
 	return 0;
 }
 
+/* Sende die angekommene Nachricht @param amount mal zurück */
 int bandwithResponse(int amount){
 
+	/* Da bei vielen Nachrichten zu wenig am Client ankamen,
+	habe ich eine kleine Verzögerung einbaut, da ich denke dass dies
+	das Problem mindert */
 	int milliseconds = 1000;
 	struct timespec ts;
     	ts.tv_sec = milliseconds / 1000;
     	ts.tv_nsec = (milliseconds % 1000) * 1000000;
 
+	/* Make kurze Pause für den Client */
 	nanosleep(&ts, NULL);
 
-
+	/* Sende amount mal das Paket an den Client */
 	int i;
 	for(i=1;i<amount+1;i++){
 		printStatus(i,amount);
@@ -138,16 +162,20 @@ int bandwithResponse(int amount){
 	return 0;
 }
 
+/* Sende das Paket des Client @amount mal zurück
+Warte dabei zwischendurch, falls der Client zuviele Pakete
+bekommt eine kurze Zeit */
 int packagelossResponse(int amount){
 	int i;
-
+	
+	/* Mache kurze Pause von 10mili. Sekunden */
 	int milliseconds = 10;
 	struct timespec ts;
     	ts.tv_sec = milliseconds / 1000;
     	ts.tv_nsec = (milliseconds % 1000) * 1000000;
     	
 
-
+	/* Sende amount mal ein Paket los */
 	for(i=1;i<amount+1;i++){
 		printStatus(i,amount);
 		if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, addrlen) < 0){
@@ -162,29 +190,33 @@ int packagelossResponse(int amount){
 
 /* very stable VoIP at 200 kbps —> 0,025MB/s  */
 /* 0,0195MB/s /packagesize = packages/s */
+/* Sendet Pakete an den Client mit einer Rate von ca. 0.025MB/s um
+Eine VoIP Datenrate zu simulieren */
 int voipResponse(int amount){
-	double buflen = strlen(buf);
-	double buflen_in_mb = buflen/1000000;
-	double packages_per_second = 0.025/buflen_in_mb;
-	double ms_to_wait = (1.0/packages_per_second)*1000.0;
+	double buflen = strlen(buf);	/* Hole Bufferlänge in Byte */
+	double buflen_in_mb = buflen/1000000;	/* Rechne diese in MB um */
+	double packages_per_second = 0.025/buflen_in_mb;	/* Berechne Paketanzahl pro Sekunde */
+	double ms_to_wait = (1.0/packages_per_second)*1000.0; /* Berechne Delay zwischen Paketen */
 	
-	printf("Package/s: %g\n", packages_per_second);
-	printf("Waiting: %g\n", ms_to_wait);
+	/* Kleine Debug ausgaben */
+	//printf("Package/s: %g\n", packages_per_second);
+	//printf("Waiting: %g\n", ms_to_wait);
 	
 	int i;
 
+	/* Stelle Delay auf */
 	int milliseconds = ms_to_wait;
 	struct timespec ts;
     	ts.tv_sec = milliseconds / 1000;
     	ts.tv_nsec = (milliseconds % 1000) * 1000000;
     	
-
+	/* Sende amount Pakete mit Delay */
 	for(i=1;i<amount+1;i++){
 		printStatus(i,amount);
 		if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, addrlen) < 0){
 			perror("sendto");
 		}
-		nanosleep(&ts, NULL);
+		nanosleep(&ts, NULL);	/* Schlafe für Delay */
 	}
 	printf("\n");
 	
@@ -192,7 +224,8 @@ int voipResponse(int amount){
 }
 
 
-
+/* Main Programm in welcher der Server auf ankommende Pakete wartet und diese gerecht nach dem
+Angeforderten Modi verarbeitet */
 int main(int argc, char **argv)
 {
 	//Handlet aktivierung für STRG+C
@@ -236,12 +269,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-		//Einfacher UDP Server http://www.programminglogic.com/sockets-programming-in-c-using-udp-datagrams/
-
-
-
-	
-
+	//Grundlage von https://www.cs.rutgers.edu/~pxk/417/notes/sockets/demo-udp-04.html
 
 	/* create a UDP socket */
 
@@ -268,10 +296,13 @@ int main(int argc, char **argv)
 		recvlen = recvfrom(fd, buf, BUFSIZE, 0, (struct sockaddr *)&remaddr, &addrlen);
 		if (recvlen > 0) {
 			buf[recvlen] = '\0';
-			mode = getParam(buf,0);
-			int amount = getParam(buf,1);
+
+			mode = getParam(buf,0); /* Extrahiere Modus */
+			int amount = getParam(buf,1); /* Extrahiere Anzahl */
+
 			printf("Received Message: Mode:%d | Amount: %d\n", mode, amount);
 
+			/* Entscheide Nach Modus und Antworte */
 			if(mode==1){
 				rttResponse();
 			}
@@ -290,8 +321,9 @@ int main(int argc, char **argv)
 		}
 
 	}
-	/* never exits */
 
-
+	/* Schließen des Socket */
+	close(fd);
+	return 0;
 
 	}

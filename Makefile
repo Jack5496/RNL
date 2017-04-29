@@ -1,19 +1,12 @@
-CC=gcc
-CFLAGS = -g 
-# uncomment this for SunOS
-# LIBS = -lsocket -lnsl
+binaries = server client
 
-all: clean udp-send udp-recv
+all: server client
 
-udp-send: udp-send.o 
-	$(CC) -o udp-send udp-send.o $(LIBS)
+server: server.c
+	gcc -o server server.c -Wall -Werror
+	
+client: client.c
+	gcc -o client client.c -Wall -Werror
 
-udp-recv: udp-recv.o 
-	$(CC) -o udp-recv udp-recv.o $(LIBS)
-
-udp-send.o: udp-send.c
-
-udp-recv.o: udp-recv.c
-
-clean:
-	rm -f udp-send udp-recv udp-send.o udp-recv.o 
+clean: 
+	rm -f $(binaries) *.o
