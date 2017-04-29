@@ -39,6 +39,11 @@ int msgcnt = 0;			/* count # of messages we received */
 
 int mode;
 
+void printStatus(int success, int total_messages){
+		printf("\33[2K\r");
+		printf("Sending: " GREEN "%d" RESET"/%d",success,total_messages,stdout);
+		rewind(stdout);
+}
 
 /**
 * Letzer aufruf um alles wichtige zu schließen
@@ -104,7 +109,7 @@ int getParam(char *buffer,int pos){
 
 int rttResponse(){
 	sprintf(buf, "ack %d", msgcnt++);
-	printf("sending response \"%s\"\n", buf);
+	//printf("sending response \"%s\"\n", buf);
 	if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, addrlen) < 0){
 		perror("sendto");
 	}
@@ -113,12 +118,13 @@ int rttResponse(){
 
 int bandwithResponse(int amount){
 	int i;
-	for(i=0;i<amount;i++){
-		printf("Response \"%s\"\n", buf);
+	for(i=1;i<amount+1;i++){
+		printStatus(i,amount);
 		if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, addrlen) < 0){
 			perror("sendto");
 		}
 	}
+	printf("\n");
 	
 	return 0;
 }
@@ -133,13 +139,14 @@ int packagelossResponse(int amount){
     	
 
 
-	for(i=0;i<amount;i++){
-		printf("Response \"%s\"\n", buf);
+	for(i=1;i<amount+1;i++){
+		printStatus(i,amount);
 		if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, addrlen) < 0){
 			perror("sendto");
 		}
 		nanosleep(&ts, NULL);
 	}
+	printf("\n");
 	
 	return 0;
 }
@@ -219,9 +226,9 @@ int main(int argc, char **argv)
 		recvlen = recvfrom(fd, buf, BUFSIZE, 0, (struct sockaddr *)&remaddr, &addrlen);
 		if (recvlen > 0) {
 			buf[recvlen] = '\0';
-			printf("received message: \"%s\" (%d bytes)\n", buf, recvlen);
 			mode = getParam(buf,0);
 			int amount = getParam(buf,1);
+			printf("Received Message: Mode:%d | Amount: %d\n", mode, amount);
 
 			if(mode==1){
 				rttResponse();

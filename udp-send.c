@@ -19,6 +19,13 @@
 #include <math.h>
 
 
+#define TIMEOUT 2
+#define DEFAULT_RTT_COUNTING 100 /* Default counting package value */
+#define DEFAULT_BANDWIDTH_COUNTING 50000 /* Default counting package value */
+#define DEFAULT_LOSS_COUNTING 100 /* Default counting package value */
+
+
+/* Some colors */
 #define RED     "\x1b[31m"
 #define GREEN   "\x1b[32m"
 #define YELLOW  "\x1b[33m"
@@ -26,20 +33,21 @@
 #define MAGENTA "\x1b[35m"
 #define CYAN    "\x1b[36m"
 #define RESET   "\x1b[0m"
+/* End colors */
 
-#define BUFLEN 65536
-#define TESTINGLEN 1450
+/* Some variables */
+#define BUFLEN 65536 /* Buffer length for sending and recieving */
+#define MAXMTU 1500 /* Maximum Package size */
 #define MSGS 100	/* number of messages to send */
 #define TO_SEC 1000000	/* number of messages to send */
 #define TO_MS 1000	/* number of messages to send */
 
-char server_adress[65536]; /* Platz für Server Adresse */
-// Potter 131.173.33.201
+char server_adress[65536]; /* Server Adress */ // Potter 131.173.33.201
 int server_port = 80;  /* Server Port */
 
-void printStatus(int success, int total_messages){
+void printStatus(int success, int total_messages, int lost){
 		printf("\33[2K\r");
-		printf("Recieved: " GREEN "%d" RESET"/%d",success,total_messages,stdout);
+		printf("Recieved: " GREEN "%d" RESET"/%d | Lost: "RED"%d"RESET,success,total_messages,lost,stdout);
 		rewind(stdout);
 }
 
@@ -51,6 +59,10 @@ int mode;
 int rtt_mode = 1;
 int bandwith_mode = 2;
 int packageloss_mode = 3;
+
+double roundtt = 0.0;
+double goodput = 0.0;
+double loss = 0.0;
 
 struct timespec timeStart, timeEnd;
 double totaltime = 0;
@@ -76,12 +88,18 @@ int stringToInt(char *argv){
 	return atoi(argv);
 }
 
+int printRTTResult(){
+	printf("Avg. RTT: "GREEN"%g"RESET"ms\n", roundtt);
+	return 0;
+}
 
 int rtt(int amount){
 
 /* now let's send the messages */
 
-	printf(GREEN "Test: " RESET "Sending %d messages to port %d\n",MSGS,server_port);
+	printf(GREEN "RTT Test: " RESET "Sending %d messages\n",amount);
+
+	int lost = 0;
 
 	for (i=1; i < amount +1; i++) {
 
@@ -110,20 +128,19 @@ int rtt(int amount){
 
                     	buf[recvlen] = 0;	/* expect a printable string - terminate it */
                         
-			printStatus(i, amount);   
+			printStatus(i, amount,lost);   
 			
               }
 		else{
-			myerror("RecFrom Fail!");
+			lost++;
+			printStatus(i, amount,lost);
 		}
 	}
 
-	double rtt = totaltime/amount/TO_SEC;
-	printStatus(amount, amount);
-	printf("RTT: %g\n",rtt);   
+	roundtt = totaltime/amount;
+	printStatus(amount-lost, amount,lost);
 	printf("\nTest complete!\n");
 
-	close(fd);
 	return 0;
 }
 
@@ -131,32 +148,36 @@ int rtt(int amount){
 
 
 
+int printBandwithResult(){
+	printf("Bandwidth: "GREEN"%g"RESET"MB/s\n", goodput);
+	return 0;
+}
 
-
-
-int bandwith(int amount){
-
-double goodput = 0.0;
+int bandwith(int counting, int demand){
 
 /* now let's send the messages */
 
-	printf(GREEN "Test: " RESET "Sending %d messages to port %d\n",MSGS,server_port);
+	printf(GREEN "Bandwidth Test: " RESET "Demanding %d packages, counting %d\n",demand,counting);
 
-	char data[TESTINGLEN];
+	int lost = 0;
+	goodput = 0.0;
+	totaltime = 0.0;
+
+	char data[MAXMTU];
 	int pos;
-	for(pos=0;pos<TESTINGLEN;pos++){
+	for(pos=0;pos<MAXMTU;pos++){
 		data[pos]='1';
 	}
-	data[TESTINGLEN-1]='\0';
+	data[MAXMTU-1]='\0';
 
-	sprintf(buf, "[%d][%d]%s", bandwith_mode,amount,data);
+	sprintf(buf, "[%d][%d]%s", bandwith_mode,demand,data);
 
-	if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, slen)==-1) {
+	if (sendto(fd, buf, MAXMTU, 0, (struct sockaddr *)&remaddr, slen)==-1) {
 			perror("sendto");
 			myerror("SendTo Error!");
 		}
 
-	for (i=1; i < amount+1; i++) {
+	for (i=1; i < counting+1; i++) {
 
 
 		/* now receive an acknowledgement from the server */
@@ -165,23 +186,23 @@ double goodput = 0.0;
 
 			goodput+=recvlen;
 
-			if(i==1){
-				if(clock_gettime(CLOCK_MONOTONIC_RAW,&timeStart)){
-					myerror("Time is broken!\n");
-				}
-			}
-
-			if(i==amount){
-				if(clock_gettime(CLOCK_MONOTONIC_RAW,&timeEnd)){
-					myerror("Time is broken!");
-				}
-			}
-
                     	buf[recvlen] = 0;	/* expect a printable string - terminate it */
-                     printStatus(i,amount);
+                     printStatus(i,counting,lost);
               }
 		else{
-			myerror("RecFrom Fail!");
+			printf(RED"\nTest has stopped! Please restart!\n");
+			myerror("Packageloss! Can’t measure max. Bandwidth!");
+		}
+
+		if(i==1){
+			if(clock_gettime(CLOCK_MONOTONIC_RAW,&timeStart)){
+				myerror("Time is broken!\n");
+			}
+		}
+		if(i==counting){
+			if(clock_gettime(CLOCK_MONOTONIC_RAW,&timeEnd)){
+				myerror("Time is broken!");
+			}
 		}
 	}
 
@@ -192,54 +213,59 @@ double goodput = 0.0;
 	goodput/=8000000; //in MB
 
 	goodput/=totaltime;
-
-
-	printf("\nBandwidth: %gMB/s!\n",goodput);
-	
+	printStatus(counting-lost, counting,lost);
 	printf("\nTest complete!\n");
 
-	close(fd);
 	return 0;
 }
 
 
+int printPackagelossResult(){
+	printf("Packageloss: "GREEN"%g"RESET"%%\n", loss);
+	return 0;
+}
 
 int packageloss(int amount){
 
 /* now let's send the messages */
+	int lost = 0;
+	loss = 0.0;
 
-	printf(GREEN "Test: " RESET "Sending %d messages to port %d\n",MSGS,server_port);
+	printf(GREEN "Test: " RESET "Demanding %d messages\n",amount);
 
-	char data[20];
-	memset(data,0, TESTINGLEN*sizeof(int));
+	char data[MAXMTU];
+	int pos;
+	for(pos=0;pos<MAXMTU;pos++){
+		data[pos]='1';
+	}
+	data[MAXMTU-1]='\0';
 
 	sprintf(buf, "[%d][%d] - %s", packageloss_mode,amount, data);
 
-	if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, slen)==-1) {
+	if (sendto(fd, buf, MAXMTU, 0, (struct sockaddr *)&remaddr, slen)==-1) {
 			perror("sendto");
 			myerror("SendTo Error!");
-		}
-
-	int recieved = 0;
+	}
 
 	for (i=1; i < amount+1; i++) {
 		/* now receive an acknowledgement from the server */
 		recvlen = recvfrom(fd, buf, BUFLEN, 0, (struct sockaddr *)&remaddr, &slen);
               if (recvlen >= 0) {
                     	buf[recvlen] = 0;	/* expect a printable string - terminate it */
-                     printf("Package %d : %s!\n",i,buf);
-			recieved++;
+         
+
+			printStatus(i-lost, amount,lost);
               }
 		else{
-			//printf("RecFrom Fail!\n"); //package lost
+			lost++;
+			printStatus(i-lost, amount,lost);
 		}
 	}
    	
-	int lost = amount-recieved;
-	printf("Recieved: %d/%d | Lost: "RED"%d\n"RESET,recieved,amount,lost);
+	printStatus(amount-lost, amount,lost);
 	printf("\nTest complete!\n");
+	loss = lost/amount;
 
-	close(fd);
 	return 0;
 }
 
@@ -252,17 +278,20 @@ int main(int argc, char **argv){
 	needed_arguments++; //Server Adress
     	needed_arguments++; //Server Port
     	needed_arguments++; //Mode
+
+	int auto_test = needed_arguments-1;
 	
 	int arguments_for_rtt = needed_arguments;
 	arguments_for_rtt ++; //Amount
 	
 	int arguments_for_brandwith = needed_arguments;
-	arguments_for_brandwith ++; //Amount
+	arguments_for_brandwith ++; //Counting Package
+	arguments_for_brandwith ++; //Server Sending
 
 	int arguments_for_packageloss = needed_arguments;
 	arguments_for_packageloss ++; //Amount
 
-	if(argc<needed_arguments){
+	if(argc<auto_test){
 		printf("Not enough arguments!\n");
 		exit(1);
 	}
@@ -314,11 +343,19 @@ int main(int argc, char **argv){
 
 
 
+	
+	if(argc==auto_test){
+		rtt(DEFAULT_RTT_COUNTING);
+		bandwith(DEFAULT_BANDWIDTH_COUNTING,2* DEFAULT_BANDWIDTH_COUNTING);
+		packageloss(DEFAULT_LOSS_COUNTING);
 
-
-
-
-	/* Mode auslesen */ 
+		printRTTResult();
+		printBandwithResult();
+		printPackagelossResult();
+	}	
+	else{
+		
+		/* Mode auslesen */ 
        mode = stringToInt(argv[3]);
 	
 	if(mode<1 || mode > 3){
@@ -329,19 +366,28 @@ int main(int argc, char **argv){
 			myerror("Not enough arguments for RRT!");
 		}
 		rtt(stringToInt(argv[4]));
+		printRTTResult();
 	}
 	if(mode==2){
 		if(argc!=arguments_for_brandwith){
 			myerror("Not enough arguments for brandwith!");
 		}
-		bandwith(stringToInt(argv[4]));
+		bandwith(stringToInt(argv[4]),stringToInt(argv[5]));
+		printBandwithResult();
 	}
 	if(mode==3){
 		if(argc!=arguments_for_packageloss){
 			myerror("Not enough arguments for package loss!");
 		}
 		packageloss(stringToInt(argv[4]));
+		printPackagelossResult();
 	}
+
+
+	}
+
+
+	close(fd);
 
 
 
