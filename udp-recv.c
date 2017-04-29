@@ -160,6 +160,39 @@ int packagelossResponse(int amount){
 	return 0;
 }
 
+/* very stable VoIP at 200 kbps —> 0,025MB/s  */
+/* 0,0195MB/s /packagesize = packages/s */
+int voipResponse(int amount){
+	double buflen = strlen(buf);
+	double buflen_in_mb = buflen/1000000;
+	double packages_per_second = 0.025/buflen_in_mb;
+	double ms_to_wait = (1.0/packages_per_second)*1000.0;
+	
+	printf("Package/s: %g\n", packages_per_second);
+	printf("Waiting: %g\n", ms_to_wait);
+	
+	int i;
+
+	int milliseconds = ms_to_wait;
+	struct timespec ts;
+    	ts.tv_sec = milliseconds / 1000;
+    	ts.tv_nsec = (milliseconds % 1000) * 1000000;
+    	
+
+	for(i=1;i<amount+1;i++){
+		printStatus(i,amount);
+		if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, addrlen) < 0){
+			perror("sendto");
+		}
+		nanosleep(&ts, NULL);
+	}
+	printf("\n");
+	
+	return 0;
+}
+
+
+
 int main(int argc, char **argv)
 {
 	//Handlet aktivierung für STRG+C
@@ -247,6 +280,9 @@ int main(int argc, char **argv)
 			}
 			if(mode==3){
 				packagelossResponse(amount);
+			}
+			if(mode==4){
+				voipResponse(amount);
 			}
 		}
 		else{

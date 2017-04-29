@@ -19,9 +19,9 @@
 #include <math.h>
 
 
-#define TIMEOUT 30
+#define TIMEOUT 3
 #define DEFAULT_RTT_COUNTING 100 /* Default counting package value */
-#define DEFAULT_BANDWIDTH_COUNTING 50 /* Default counting package value */
+#define DEFAULT_BANDWIDTH_COUNTING 30 /* Default counting package value */
 #define DEFAULT_LOSS_COUNTING 100 /* Default counting package value */
 // Potter 131.173.33.201
 
@@ -38,7 +38,7 @@
 
 /* Some variables */
 #define BUFLEN 65536 /* Buffer length for sending and recieving */
-#define MAXMTU 1500 /* Maximum Package size */
+#define MAXMTU 200 /* Maximum Package size */
 #define MSGS 100	/* number of messages to send */
 #define TO_SEC 1000000	/* number of messages to send */
 #define TO_MS 1000	/* number of messages to send */
@@ -60,6 +60,7 @@ int mode;
 int rtt_mode = 1;
 int bandwith_mode = 2;
 int packageloss_mode = 3;
+int voip_mode = 4;
 
 double roundtt = 0.0;
 double goodput = 0.0;
@@ -211,7 +212,7 @@ int bandwith(int counting, int demand){
 	deltatime += (timeEnd.tv_nsec - timeStart.tv_nsec) / TO_MS;
 	totaltime += deltatime;
    	totaltime/=TO_SEC;
-	goodput/=8000000; //in MB
+	goodput/=1000000; //in MB
 
 	goodput/=totaltime;
 	printStatus(counting-lost, counting,lost);
@@ -270,6 +271,80 @@ int packageloss(int amount){
 	return 0;
 }
 
+
+
+
+int printVoipResult(){
+	printf("Bandwidth: "GREEN"%g"RESET"MB/s\n", goodput);
+	return 0;
+}
+
+/* stable VoIP at 156 kbps —> 0,0195MB/s */
+int voip(int counting, int demand){
+
+/* now let's send the messages */
+
+	printf(GREEN "Bandwidth Test: " RESET "Demanding %d packages, counting %d\n",demand,counting);
+
+	int lost = 0;
+	goodput = 0.0;
+	totaltime = 0.0;
+
+	char data[200];
+	int pos;
+	for(pos=0;pos<MAXMTU;pos++){
+		data[pos]='1';
+	}
+	data[MAXMTU-1]='\0';
+
+	sprintf(buf, "[%d][%d]%s", voip_mode,demand,data);
+
+	if (sendto(fd, buf, MAXMTU, 0, (struct sockaddr *)&remaddr, slen)==-1) {
+			perror("sendto");
+			myerror("SendTo Error!");
+	}
+
+	for (i=1; i < counting+1; i++) {
+
+
+		/* now receive an acknowledgement from the server */
+		recvlen = recvfrom(fd, buf, BUFLEN, 0, (struct sockaddr *)&remaddr, &slen);
+              if (recvlen >= 0) {
+
+			goodput+=recvlen;
+
+                    	buf[recvlen] = 0;	/* expect a printable string - terminate it */
+                     printStatus(i,counting,lost);
+              }
+		else{
+			lost++;
+			printStatus(i-lost,counting,lost);
+		}
+
+		if(i==1){
+			if(clock_gettime(CLOCK_MONOTONIC_RAW,&timeStart)){
+				myerror("Time is broken!\n");
+			}
+		}
+		if(i==counting){
+			if(clock_gettime(CLOCK_MONOTONIC_RAW,&timeEnd)){
+				myerror("Time is broken!");
+			}
+		}
+	}
+
+	deltatime = (timeEnd.tv_sec - timeStart.tv_sec) * TO_SEC;
+	deltatime += (timeEnd.tv_nsec - timeStart.tv_nsec) / TO_MS;
+	totaltime += deltatime;
+   	totaltime/=TO_SEC;
+	goodput/=1000000; //in MB
+
+	goodput/=totaltime;
+	printStatus(counting-lost, counting,lost);
+	printf("\nTest complete!\n");
+
+	return 0;
+}
 
 
 
@@ -359,8 +434,8 @@ int main(int argc, char **argv){
 		/* Mode auslesen */ 
        mode = stringToInt(argv[3]);
 	
-	if(mode<1 || mode > 3){
-		myerror("Mode has to be [1..3] !");
+	if(mode<1 || mode > 4){
+		myerror("Mode has to be [1..4] !");
 	}
 	if(mode==1){
 		if(argc!=arguments_for_rtt){
@@ -383,7 +458,13 @@ int main(int argc, char **argv){
 		packageloss(stringToInt(argv[4]));
 		printPackagelossResult();
 	}
-
+	if(mode==4){
+		if(argc!=arguments_for_brandwith){
+			myerror("Not enough arguments for brandwith!");
+		}
+		voip(stringToInt(argv[4]),stringToInt(argv[5]));
+		printVoipResult();
+	}
 
 	}
 
