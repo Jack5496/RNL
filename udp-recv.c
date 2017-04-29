@@ -106,10 +106,10 @@ main(int argc, char **argv)
 
 	/* now loop, receiving data and printing what we received */
 	while(keep_alive) {
-		printf("waiting on port %d\n", SERVICE_PORT);
+		printf("Waiting on port %d\n", SERVICE_PORT);
 		recvlen = recvfrom(fd, buf, BUFSIZE, 0, (struct sockaddr *)&remaddr, &addrlen);
 		if (recvlen > 0) {
-			buf[recvlen] = 0;
+			buf[recvlen] = '\0';
 			printf("received message: \"%s\" (%d bytes)\n", buf, recvlen);
 		}
 		else
