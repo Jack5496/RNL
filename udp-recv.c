@@ -141,7 +141,7 @@ int bandwithResponse(int amount){
 int packagelossResponse(int amount){
 	int i;
 
-	int milliseconds = 1000;
+	int milliseconds = 100;
 	struct timespec ts;
     	ts.tv_sec = milliseconds / 1000;
     	ts.tv_nsec = (milliseconds % 1000) * 1000000;

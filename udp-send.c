@@ -63,8 +63,9 @@ int packageloss_mode = 3;
 int voip_mode = 4;
 
 double roundtt = 0.0;
-double goodput = 0.0;
 double loss = 0.0;
+double voipgoodput = 0.0;
+double goodput = 0.0;
 
 struct timespec timeStart, timeEnd;
 double totaltime = 0;
@@ -233,7 +234,7 @@ int packageloss(int amount){
 	int lost = 0;
 	loss = 0.0;
 
-	printf(GREEN "Test: " RESET "Demanding %d messages\n",amount);
+	printf(GREEN "Packageloss Test: " RESET "Demanding %d messages\n",amount);
 
 	char data[MAXMTU];
 	int pos;
@@ -275,7 +276,17 @@ int packageloss(int amount){
 
 
 int printVoipResult(){
-	printf("Bandwidth: "GREEN"%g"RESET"MB/s\n", goodput);
+	printf("VoIP Bandwidth: "GREEN"%g"RESET"MB/s\n", voipgoodput);
+	if(voipgoodput>0.019){
+		printf("VoIP: "GREEN"GOOD"RESET"\n");
+	}
+	else if(voipgoodput>0.011){
+		printf("VoIP: "YELLOW"OK"RESET"\n");
+	}
+	else{
+		printf("VoIP: "RED"IMPOSSIBLE"RESET"\n");
+	}
+
 	return 0;
 }
 
@@ -284,10 +295,10 @@ int voip(int counting, int demand){
 
 /* now let's send the messages */
 
-	printf(GREEN "Bandwidth Test: " RESET "Demanding %d packages, counting %d\n",demand,counting);
+	printf(GREEN "VoIP Test: " RESET "Demanding %d packages, counting %d\n",demand,counting);
 
 	int lost = 0;
-	goodput = 0.0;
+	voipgoodput = 0.0;
 	totaltime = 0.0;
 
 	char data[200];
@@ -311,7 +322,7 @@ int voip(int counting, int demand){
 		recvlen = recvfrom(fd, buf, BUFLEN, 0, (struct sockaddr *)&remaddr, &slen);
               if (recvlen >= 0) {
 
-			goodput+=recvlen;
+			voipgoodput+=recvlen;
 
                     	buf[recvlen] = 0;	/* expect a printable string - terminate it */
                      printStatus(i,counting,lost);
@@ -337,9 +348,9 @@ int voip(int counting, int demand){
 	deltatime += (timeEnd.tv_nsec - timeStart.tv_nsec) / TO_MS;
 	totaltime += deltatime;
    	totaltime/=TO_SEC;
-	goodput/=1000000; //in MB
+	voipgoodput/=1000000; //in MB
 
-	goodput/=totaltime;
+	voipgoodput/=totaltime;
 	printStatus(counting-lost, counting,lost);
 	printf("\nTest complete!\n");
 
@@ -422,12 +433,16 @@ int main(int argc, char **argv){
 	
 	if(argc==auto_test){
 		rtt(DEFAULT_RTT_COUNTING);
-		bandwith(DEFAULT_BANDWIDTH_COUNTING,2* DEFAULT_BANDWIDTH_COUNTING);
-		packageloss(DEFAULT_LOSS_COUNTING);
-
 		printRTTResult();
-		printBandwithResult();
+
+		voip(DEFAULT_BANDWIDTH_COUNTING, DEFAULT_BANDWIDTH_COUNTING);
+		printVoipResult();
+		
+		packageloss(DEFAULT_LOSS_COUNTING);
 		printPackagelossResult();
+		
+		bandwith(DEFAULT_BANDWIDTH_COUNTING,2* DEFAULT_BANDWIDTH_COUNTING);
+		printBandwithResult();
 	}	
 	else{
 		
